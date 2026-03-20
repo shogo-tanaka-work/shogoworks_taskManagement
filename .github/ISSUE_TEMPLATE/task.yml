@@ -1,0 +1,44 @@
+name: 汎用タスク
+description: 一般的なタスクを作成します
+title: "[タスク] "
+labels: []
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: カテゴリ
+      options:
+        - 🏢 クライアント案件
+        - 💼 営業・商談
+        - 📋 社内業務
+        - 📚 学習
+        - 🏠 プライベート
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 優先度
+      options:
+        - 🔴 最優先
+        - 🟡 通常
+        - 🔵 いつか
+      default: 1
+    validations:
+      required: true
+
+  - type: input
+    id: deadline
+    attributes:
+      label: 期限
+      description: 期限がある場合は記入してください（例: 2026-04-01）
+      placeholder: YYYY-MM-DD
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 詳細
+      description: タスクの詳細を記入してください
+    validations:
+      required: false
