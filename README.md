@@ -1,0 +1,2 @@
+# shogoworks_taskManagement
+shogoworksのタスク管理用リポジトリです。
