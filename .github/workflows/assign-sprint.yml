@@ -1,0 +1,159 @@
+name: Auto-assign Sprint from Due Date
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to process (blank = all issues)"
+        required: false
+
+env:
+  PROJECT_NUMBER: "2"
+  PROJECT_OWNER: "shogo-tanaka-work"
+  REPO_OWNER: "shogo-tanaka-work"
+  REPO_NAME: "shogoworks_taskManagement"
+
+jobs:
+  assign-sprint:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+      repository-projects: write
+    steps:
+      - name: Assign Sprint based on due date
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            const projectNumber = parseInt(process.env.PROJECT_NUMBER);
+            const projectOwner = process.env.PROJECT_OWNER;
+
+            // Get project ID and Sprint field configuration
+            const projectQuery = `
+              query($owner: String!, $number: Int!) {
+                user(login: $owner) {
+                  projectV2(number: $number) {
+                    id
+                    field(name: "Sprint") {
+                      ... on ProjectV2IterationField {
+                        id
+                        configuration {
+                          iterations {
+                            id
+                            title
+                            startDate
+                            duration
+                          }
+                        }
+                      }
+                    }
+                    items(first: 100) {
+                      nodes {
+                        id
+                        fieldValues(first: 15) {
+                          nodes {
+                            ... on ProjectV2ItemFieldDateValue {
+                              date
+                              field { ... on ProjectV2Field { name } }
+                            }
+                            ... on ProjectV2ItemFieldIterationValue {
+                              iterationId
+                              field { ... on ProjectV2IterationField { name } }
+                            }
+                          }
+                        }
+                        content {
+                          ... on Issue { number title }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const result = await github.graphql(projectQuery, {
+              owner: projectOwner,
+              number: projectNumber,
+            });
+
+            const project = result.user.projectV2;
+            const projectId = project.id;
+            const sprintField = project.field;
+            const iterations = sprintField.configuration.iterations;
+
+            // Determine which issues to process
+            const inputIssueNumber = context.payload.inputs?.issue_number;
+            const eventIssueNumber = context.payload.issue?.number;
+            const targetNumber = inputIssueNumber
+              ? parseInt(inputIssueNumber)
+              : eventIssueNumber || null;
+
+            for (const item of project.items.nodes) {
+              if (!item.content) continue;
+
+              // Filter to specific issue if triggered by event or input
+              if (targetNumber && item.content.number !== targetNumber) continue;
+
+              // Extract due date and current sprint
+              let dueDate = null;
+              let currentSprintId = null;
+
+              for (const fv of item.fieldValues.nodes) {
+                if (fv.date && fv.field?.name === "期限") {
+                  dueDate = fv.date;
+                }
+                if (fv.iterationId && fv.field?.name === "Sprint") {
+                  currentSprintId = fv.iterationId;
+                }
+              }
+
+              if (!dueDate) {
+                core.info(`#${item.content.number} "${item.content.title}" — no due date, skipping`);
+                continue;
+              }
+
+              // Find matching iteration (due date falls within the sprint week)
+              const dueDateObj = new Date(dueDate + "T00:00:00Z");
+              const matchedIteration = iterations.find((iter) => {
+                const start = new Date(iter.startDate + "T00:00:00Z");
+                const end = new Date(start.getTime() + iter.duration * 86400000);
+                return dueDateObj >= start && dueDateObj < end;
+              });
+
+              if (!matchedIteration) {
+                core.warning(`#${item.content.number} — due ${dueDate} has no matching sprint`);
+                continue;
+              }
+
+              // Skip if already assigned to the correct sprint
+              if (currentSprintId === matchedIteration.id) {
+                core.info(`#${item.content.number} — already in ${matchedIteration.title}`);
+                continue;
+              }
+
+              // Assign the sprint
+              const mutation = `
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $fieldId
+                    value: { iterationId: $iterationId }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }
+              `;
+
+              await github.graphql(mutation, {
+                projectId: projectId,
+                itemId: item.id,
+                fieldId: sprintField.id,
+                iterationId: matchedIteration.id,
+              });
+
+              core.info(`#${item.content.number} "${item.content.title}" — assigned to ${matchedIteration.title}`);
+            }
