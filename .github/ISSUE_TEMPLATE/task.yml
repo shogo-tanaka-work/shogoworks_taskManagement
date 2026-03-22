@@ -1,6 +1,6 @@
-name: 汎用タスク
-description: 一般的なタスクを作成します
-title: "[タスク] "
+name: 開発タスク
+description: リポジトリの開発タスクを作成します
+title: "[開発タスク] "
 labels: []
 body:
   - type: dropdown
@@ -8,11 +8,11 @@ body:
     attributes:
       label: カテゴリ
       options:
-        - 🏢 クライアント案件
-        - 💼 営業・商談
-        - 📋 社内業務
-        - 📚 学習
-        - 🏠 プライベート
+        - "\U0001F527 機能追加"
+        - "\U0001F41B バグ修正"
+        - "\u2699\uFE0F CI/CD・インフラ"
+        - "\U0001F4DD ドキュメント"
+        - "\U0001F528 リファクタ"
     validations:
       required: true
 
@@ -21,9 +21,9 @@ body:
     attributes:
       label: 優先度
       options:
-        - 🔴 最優先
-        - 🟡 通常
-        - 🔵 いつか
+        - "\U0001F534 最優先"
+        - "\U0001F7E1 通常"
+        - "\U0001F535 いつか"
       default: 1
     validations:
       required: true
